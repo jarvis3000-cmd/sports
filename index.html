@@ -8,12 +8,16 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.16.2/shaka-player.ui.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.16.2/controls.min.css">
+
 <style>
 :root {
   --bg:#050509;
   --card:#0b0b12;
   --border:rgba(255,255,255,.08);
   --radius:18px;
+  --theme-color: #e50914;
 }
 
 *{box-sizing:border-box;}
@@ -59,20 +63,22 @@ header span{font-size:20px;font-weight:700;}
 .card img{width:100%;height:120px;object-fit:contain;background:#000;}
 .card h3{text-align:center;padding:8px;font-size:14px;font-weight:600;}
 
-/* MODAL PLAYER */
+/* MODAL PLAYER CONTAINER */
 #playerModal{
-  display:none; /* HIDE ON LOAD */
+  display:none; 
   position:fixed;inset:0;background:rgba(0,0,0,0.95);
   z-index:9999;display:flex;flex-direction:column;justify-content:center;align-items:center;
 }
-#playerFrame{
-  width:90%;max-width:1100px;height:70vh;border:none;border-radius:12px;
+.shaka-video-container {
+  width:90%;max-width:1100px;height:70vh;border-radius:12px;overflow:hidden;background:#000;
+  position: relative;
 }
+video { width:100%; height:100%; object-fit:contain; background:#000; outline: none; }
 
-/* CONTROL PANEL */
+/* CONTROL PANEL BELOW MODAL */
 #controls{
   display:flex;justify-content:center;align-items:center;gap:10px;
-  margin-top:8px;background:#111;padding:8px 10px;border-radius:12px;
+  margin-top:8px;background:#111;padding:8px 10px;border-radius:12px;z-index: 10001;
 }
 .btn{
   background:#111;color:#fff;border:1px solid var(--border);
@@ -83,36 +89,29 @@ header span{font-size:20px;font-weight:700;}
 
 /* CLOSE BUTTON TOP */
 #closeBtn{
-  position:absolute;top:10px;right:10px;background:#000;color:#fff;border:none;font-size:22px;cursor:pointer;z-index:10000;
+  position:absolute;top:10px;right:10px;background:#000;color:#fff;border:none;font-size:22px;cursor:pointer;z-index:10002;
 }
 
-/* FULLSCREEN & OBJECT-FIT FIX */
-video:fullscreen, video:-webkit-full-screen, iframe:fullscreen, iframe:-webkit-full-screen{
-  width:100vw !important;height:100vh !important;max-width:100vw !important;max-height:100vh !important;object-fit:contain !important;background:black;
+#debug-status {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  z-index: 50; color: #fff; background: rgba(20, 20, 20, 0.95);
+  padding: 15px 25px; font-size: 14px; font-weight: 500; border-radius: 8px;
+  opacity: 0; visibility: hidden; text-align: center; transition: opacity 0.3s ease;
 }
-@media(min-aspect-ratio:16/9){
-  video:fullscreen, video:-webkit-full-screen, iframe:fullscreen, iframe:-webkit-full-screen{object-fit:cover !important;}
-}
+#debug-status.show { opacity: 1; visibility: visible; }
+#debug-status.error { border-bottom: 3px solid #ff4444; }
+#debug-status.success { border-bottom: 3px solid #00C851; }
+#debug-status.loading { border-bottom: 3px solid var(--theme-color); }
 </style>
 </head>
 <body>
 
 <header style="display:flex; align-items:center; gap:15px;">
-
-  <a href="https://ultron3000.github.io/ultron" 
-     style="display:flex; align-items:center; gap:8px; text-decoration:none; color:inherit;">
-    
-    <img 
-      src="https://static.readdy.ai/image/0ece273271e400e488b9947cb1e99e9a/a79b6f32c71c4ee2094ead0eb9c84c9b.png" 
-      alt="Cloud TV Logo"
-      style="cursor:pointer;"
-    >
-    
+  <a href="https://ultron3000.github.io/ultron" style="display:flex; align-items:center; gap:8px; text-decoration:none; color:inherit;">
+    <img src="https://static.readdy.ai/image/0ece273271e400e488b9947cb1e99e9a/a79b6f32c71c4ee2094ead0eb9c84c9b.png" alt="Cloud TV Logo">
     <span>Cloud TV</span>
   </a>
-
-  <input type="text" id="searchBar" placeholder="Search channels..." style="margin-left:auto;">
-
+  <input type="text" id="searchBar" placeholder="Search channels...">
 </header>
 
 <div id="categories"></div>
@@ -120,14 +119,19 @@ video:fullscreen, video:-webkit-full-screen, iframe:fullscreen, iframe:-webkit-f
 
 <div id="playerModal">
   <button id="closeBtn" onclick="closePlayer()">✖</button>
-  <iframe id="playerFrame" allow="autoplay; encrypted-media; fullscreen; picture-in-picture"></iframe>
+  
+  <div class="shaka-video-container" id="player-container">
+    <div id="debug-status">Ready</div>
+    <video id="video" autoplay playsinline preload="metadata"></video>
+  </div>
+
   <div id="controls">
     <button id="prevBtn" class="btn"><i class="fas fa-step-backward"></i>Prev</button>
-    <button id="playPauseBtn" class="btn"><i class="fas fa-play" id="playIcon"></i></button>
+    <button id="muteBtn" class="btn"><i class="fas fa-volume-up" id="muteIcon"></i>Mute</button>
+    <button id="fullscreenBtn" class="btn"><i class="fas fa-expand"></i>Fullscreen</button>
     <button id="nextBtn" class="btn">Next<i class="fas fa-step-forward"></i></button>
-    <button id="fullscreenBtn" class="btn"><i class="fas fa-expand"></i></button>
-    <button id="muteBtn" class="btn"><i class="fas fa-volume-up" id="muteIcon"></i></button>
-    <button id="closeCtrlBtn" class="btn"><i class="fas fa-times"></i></button> </div>
+    <button id="closeCtrlBtn" class="btn"><i class="fas fa-times"></i>Close</button> 
+  </div>
 </div>
 
 <script>
@@ -135,36 +139,48 @@ let channels = [];
 let filtered = [];
 let currentGroup = "All";
 let currentIndex = 0;
+let shakaPlayerInstance = null;
+let shakaUiInstance = null;
 
-// HIDE modal on load
+const statusEl = document.getElementById('debug-status');
+function updateStatus(msg, type = 'info') {
+    statusEl.innerText = msg;
+    statusEl.className = `show ${type}`;
+}
+
 window.addEventListener("load",()=>{
   document.getElementById("playerModal").style.display="none";
-  document.getElementById("playerFrame").src="";
+  shaka.polyfill.installAll();
+  loadChannels();
 });
 
-// Load channels.json
+// Fetches live from JSON via proxy endpoint
 async function loadChannels(){
   try {
-    const res = await fetch("https://sayan-json-3.pages.dev/Data/sports.json");
+    const targetUrl = "https://sayan-json-3.pages.dev/Data/sports.json";
+    const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`);
     const rawData = await res.json();
     
-    // Map properties seamlessly to prevent breaking your code's reliance on 'link', 'logo', and 'group'
-    channels = rawData.map(ch => ({
+    // Fallback normalization logic matching structure rules
+    let arrayData = Array.isArray(rawData) ? rawData : (rawData.channels || rawData.data || rawData.result || []);
+
+    channels = arrayData.map(ch => ({
       ...ch,
-      link: ch.stream_url || "", 
-      logo: ch.logo || "https://static.readdy.ai/image/0ece273271e400e488b9947cb1e99e9a/a79b6f32c71c4ee2094ead0eb9c84c9b.png", // fallback logo
-      group: ch.group || "Sports" // fallback category
+      id: ch.id || ch.channel_id || "",
+      name: ch.name || "Unknown Channel",
+      link: ch.url || ch.stream_url || ch.channel_url || "", 
+      logo: ch.logo || "https://static.readdy.ai/image/0ece273271e400e488b9947cb1e99e9a/a79b6f32c71c4ee2094ead0eb9c84c9b.png",
+      group: ch.group || "Sports" 
     }));
     
     filtered = channels;
     renderCategories();
     renderChannels();
   } catch (error) {
-    console.error("Error loading channels:", error);
+    console.error("Failed fetching live list data streams:", error);
   }
 }
 
-// Render categories
 function renderCategories(){
   const groups = ["All", ...new Set(channels.map(c=>c.group))];
   const container = document.getElementById("categories");
@@ -181,7 +197,6 @@ function renderCategories(){
   });
 }
 
-// Filter channels by category + search
 function filterChannels(){
   const searchTerm = document.getElementById("searchBar").value.toLowerCase();
   filtered = channels.filter(c=>(currentGroup==="All"||c.group===currentGroup) && c.name.toLowerCase().includes(searchTerm));
@@ -189,7 +204,6 @@ function filterChannels(){
   renderCategories();
 }
 
-// Render channel cards
 function renderChannels(){
   const grid=document.getElementById("channels");
   grid.innerHTML="";
@@ -202,357 +216,122 @@ function renderChannels(){
   });
 }
 
-// Open modal
-function openPlayer(index){
-  currentIndex=index;
-  const modal=document.getElementById("playerModal");
-  modal.style.display="flex";
-  const frame=document.getElementById("playerFrame");
-  frame.src=filtered[index].link;
+async function openPlayer(index){
+  currentIndex = index;
+  document.getElementById("playerModal").style.display = "flex";
+  
+  const videoEl = document.getElementById('video');
+  const container = document.getElementById('player-container');
+  const chan = filtered[index];
 
-  // reset icons
-  document.getElementById("playIcon").className="fas fa-play";
-  document.getElementById("muteIcon").className="fas fa-volume-up";
+  if (shakaUiInstance) { shakaUiInstance.destroy(); shakaUiInstance = null; }
+  if (shakaPlayerInstance) { await shakaPlayerInstance.destroy(); shakaPlayerInstance = null; }
+
+  shakaPlayerInstance = new shaka.Player(videoEl);
+  shakaUiInstance = new shaka.ui.Overlay(shakaPlayerInstance, container, videoEl);
+
+  shakaUiInstance.configure({
+       controlPanelElements: ["mute", "play_pause", "time_and_duration", "spacer", "quality", "picture_in_picture", "fullscreen"]
+  });
+
+  const playerConfig = {
+       streaming: { lowLatencyMode: true, bufferingGoal: 5 },
+       abr: { enabled: true }
+  };
+
+  if (chan.key_id || chan.key) {
+      // Direct variable mapping assignment securely
+      let kId = chan.key_id || chan.keyId || "";
+      let kV = chan.key || "";
+      playerConfig.drm = { clearKeys: { [kId]: kV } };
+  }
+  shakaPlayerInstance.configure(playerConfig);
+
+  shakaPlayerInstance.getNetworkingEngine().registerRequestFilter((type, request) => {
+    request.headers['Referer'] = 'https://www.jiotv.com/';
+    request.headers['User-Agent'] = 'plaYtv/7.1.5 (Linux;Android 13) ExoPlayerLib/2.11.6';
+    
+    const hdneaRegex = /__hdnea__=[a-zA-Z0-9~=\-\_\/\*]+/;
+    let cookieStr = "";
+    if (chan.cookie && hdneaRegex.test(chan.cookie)) {
+        cookieStr = chan.cookie.match(hdneaRegex)[0];
+    } else if (hdneaRegex.test(chan.link)) {
+        cookieStr = chan.link.match(hdneaRegex)[0];
+    }
+
+    if (cookieStr && (type === shaka.net.NetworkingEngine.RequestType.MANIFEST || type === shaka.net.NetworkingEngine.RequestType.SEGMENT)) {
+      const baseUri = request.uris[0].split('?')[0];
+      request.uris[0] = baseUri + '?' + cookieStr;
+    }
+  });
+
+  try {
+    updateStatus("Loading Stream...", "loading");
+    let cleanUrl = chan.link.split('?')[0];
+    await shakaPlayerInstance.load(cleanUrl);
+    
+    const tracks = shakaPlayerInstance.getVariantTracks().sort((a, b) => a.bandwidth - b.bandwidth);
+    if (tracks.length > 0) {
+      shakaPlayerInstance.selectVariantTrack(tracks[0], true);
+      shakaPlayerInstance.configure({ abr: { enabled: true } });
+    }
+
+    videoEl.play();
+    updateStatus("Live Stream Connected!", "success");
+    // Reset volume icons back to unmute state visual indicators
+    videoEl.muted = false;
+    document.getElementById("muteIcon").className = "fas fa-volume-up";
+    setTimeout(() => { statusEl.classList.remove('show'); }, 3000);
+  } catch (e) {
+    updateStatus(`Playback Failed. Code: ${e.code || "Unknown"}`, "error");
+  }
 }
 
-// Close modal
-function closePlayer(){
-  const frame=document.getElementById("playerFrame");
-  frame.src="";
-  document.getElementById("playerModal").style.display="none";
+async function closePlayer(){
+  const videoEl = document.getElementById('video');
+  videoEl.pause();
+  
+  if (shakaUiInstance) { shakaUiInstance.destroy(); shakaUiInstance = null; }
+  if (shakaPlayerInstance) { await shakaPlayerInstance.destroy(); shakaPlayerInstance = null; }
+  
+  statusEl.classList.remove('show');
+  document.getElementById("playerModal").style.display = "none";
 }
 
-/* ===== CONTROL BUTTONS ===== */
-function getVideo(){return document.getElementById("playerFrame").contentWindow?.document.querySelector('video');}
-
-// Play / Pause toggle
-document.getElementById("playPauseBtn").onclick=()=>{
-  const v=getVideo(); if(!v) return;
-  const icon=document.getElementById("playIcon");
-  if(v.paused){ v.play(); icon.className="fas fa-pause"; } 
-  else{ v.pause(); icon.className="fas fa-play"; }
-};
-
-// Mute / Unmute toggle
+/* ===== PANEL CONTROL HANDLERS ===== */
 document.getElementById("muteBtn").onclick=()=>{
-  const v=getVideo(); if(!v) return;
-  const icon=document.getElementById("muteIcon");
-  v.muted = !v.muted;
-  icon.className=v.muted?"fas fa-volume-mute":"fas fa-volume-up";
+  const videoEl = document.getElementById('video');
+  const icon = document.getElementById("muteIcon");
+  if(videoEl.muted){
+    videoEl.muted = false;
+    icon.className = "fas fa-volume-up";
+  } else {
+    videoEl.muted = true;
+    icon.className = "fas fa-volume-mute";
+  }
 };
 
-// Fullscreen
 document.getElementById("fullscreenBtn").onclick=()=>{
-  const f=document.getElementById("playerFrame");
-  if(f.requestFullscreen) f.requestFullscreen();
+  const container = document.getElementById('player-container');
+  if (container.requestFullscreen) { container.requestFullscreen(); }
+  else if (container.webkitRequestFullscreen) { container.webkitRequestFullscreen(); }
 };
 
-// Previous / Next
-document.getElementById("prevBtn").onclick=()=>{
-  if(currentIndex>0) openPlayer(currentIndex-1);
-};
-document.getElementById("nextBtn").onclick=()=>{
-  if(currentIndex<filtered.length-1) openPlayer(currentIndex+1);
-};
-
-// Close button in control panel
-document.getElementById("closeCtrlBtn").onclick=()=>{closePlayer();};
-
+document.getElementById("prevBtn").onclick=()=>{ if(currentIndex > 0) openPlayer(currentIndex - 1); };
+document.getElementById("nextBtn").onclick=()=>{ if(currentIndex < filtered.length - 1) openPlayer(currentIndex + 1); };
+document.getElementById("closeCtrlBtn").onclick=()=>{ closePlayer(); };
 document.getElementById("searchBar").addEventListener("input",filterChannels);
-
-loadChannels();
 </script>
-<script type="text/javascript" src="https://bendspecimen.com/11/07/52/110752a01a9d540163da6fbfb98926f4.js"></script>
-
-<script type="text/javascript" src="https://bendspecimen.com/7f/ed/7f/7fed7f6cd54e4aaf8bcebbf9e31d8fc3.js"></script>
-
-<div style="text-align:center; margin:20px 0;">
-  <script type="text/javascript">
-    atOptions = {
-      'key' : '32e2eca4a8cbe495b6e046fac6e1e00b',
-      'format' : 'iframe',
-      'height' : 600,
-      'width' : 160,
-      'params' : {}
-    };
-  </script>
-  <script type="text/javascript" src="https://bendspecimen.com/32e2eca4a8cbe495b6e046fac6e1e00b/invoke.js"></script>
-</div>
-
-<div style="text-align:center; margin:20px 0;">
-  <script type="text/javascript">
-    atOptions = {
-      'key' : '5a4dc7c6c5524517e3d815b39b121f28',
-      'format' : 'iframe',
-      'height' : 90,
-      'width' : 728,
-      'params' : {}
-    };
-  </script>
-  <script type="text/javascript" src="https://bendspecimen.com/5a4dc7c6c5524517e3d815b39b121f28/invoke.js"></script>
-</div>
-
-
-<script type="text/javascript" src="https://bendspecimen.com/56/61/c1/5661c15aebfd7d940105d7c42e76b1cc.js"></script>
-
-<script type="text/javascript" src="https://bendspecimen.com/56/5e/44/565e44d5eee19958a58343407baab82d.js"></script>
-
-<div style="text-align:center; margin:20px 0;">
-  <script type="text/javascript">
-    atOptions = {
-      'key' : '32e2eca4a8cbe495b6e046fac6e1e00b',
-      'format' : 'iframe',
-      'height' : 600,
-      'width' : 160,
-      'params' : {}
-    };
-  </script>
-  <script type="text/javascript" src="https://bendspecimen.com/32e2eca4a8cbe495b6e046fac6e1e00b/invoke.js"></script>
-</div>
-
-<div style="text-align:center; margin:20px 0;">
-  <script type="text/javascript">
-    atOptions = {
-      'key' : '5a4dc7c6c5524517e3d815b39b121f28',
-      'format' : 'iframe',
-      'height' : 90,
-      'width' : 728,
-      'params' : {}
-    };
-  </script>
-  <script type="text/javascript" src="https://bendspecimen.com/5a4dc7c6c5524517e3d815b39b121f28/invoke.js"></script>
-</div>
 
 <script src="https://cdn.jsdelivr.net/npm/disable-devtool@latest"></script>
-
 <script>
-/* =========================
-   Mobile Detection
-========================= */
-const isMobile =
-    /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
-
-/* =========================
-   Disable DevTools
-========================= */
+const isMobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
 DisableDevtool({
-    disable: true,
-    disableMenu: true,
-    clearLog: true,
-    disableSelect: true,
-    disableCopy: true,
-    disableCut: true,
-    disablePaste: true,
-
-    /* FIXED */
-    disableMobile: false,
-
-    interval: 100,
-
-    ondevtoolopen: function () {
-
-        /* ONLY DESKTOP */
-        if (!isMobile) {
-            document.body.innerHTML = "";
-            window.location.replace("about:blank");
-        }
-    }
+    disable: true, disableMenu: true, clearLog: true, disableSelect: true, disableCopy: true,
+    disableCut: true, disablePaste: true, disableMobile: false, interval: 100,
+    ondevtoolopen: function () { if (!isMobile) { document.body.innerHTML = ""; window.location.replace("about:blank"); } }
 });
-
-/* =========================
-   Block View Source Shortcuts
-========================= */
-document.addEventListener("keydown", function (e) {
-
-    // F12
-    if (e.key === "F12") {
-        e.preventDefault();
-        return false;
-    }
-
-    // Ctrl+U
-    if (e.ctrlKey && e.key.toLowerCase() === "u") {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-    }
-
-    // Ctrl+Shift+I
-    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "i") {
-        e.preventDefault();
-        return false;
-    }
-
-    // Ctrl+Shift+J
-    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "j") {
-        e.preventDefault();
-        return false;
-    }
-
-    // Ctrl+Shift+C
-    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "c") {
-        e.preventDefault();
-        return false;
-    }
-
-    // Ctrl+S
-    if (e.ctrlKey && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        return false;
-    }
-
-    // Ctrl+P
-    if (e.ctrlKey && e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        return false;
-    }
-
-    // Ctrl+A
-    if (e.ctrlKey && e.key.toLowerCase() === "a") {
-        e.preventDefault();
-        return false;
-    }
-
-    // Ctrl+C
-    if (e.ctrlKey && e.key.toLowerCase() === "c") {
-        e.preventDefault();
-        return false;
-    }
-
-    // Ctrl+X
-    if (e.ctrlKey && e.key.toLowerCase() === "x") {
-        e.preventDefault();
-        return false;
-    }
-
-    // Ctrl+V
-    if (e.ctrlKey && e.key.toLowerCase() === "v") {
-        e.preventDefault();
-        return false;
-    }
-});
-
-/* =========================
-   Disable Right Click
-========================= */
-document.addEventListener("contextmenu", function (e) {
-    e.preventDefault();
-});
-
-/* =========================
-   Disable Dragging
-========================= */
-document.addEventListener("dragstart", function (e) {
-    e.preventDefault();
-});
-
-/* =========================
-   Disable Selection
-========================= */
-document.addEventListener("selectstart", function (e) {
-    e.preventDefault();
-});
-
-/* =========================
-   Disable Copy Actions
-========================= */
-["copy", "cut", "paste"].forEach(function(evt) {
-
-    document.addEventListener(evt, function(e) {
-        e.preventDefault();
-    });
-
-});
-
-/* =========================
-   Detect DevTools Window
-   (Desktop ONLY - FIXED)
-========================= */
-if (!isMobile) {
-
-    setInterval(function () {
-
-        const widthThreshold =
-            window.outerWidth - window.innerWidth > 220;
-
-        const heightThreshold =
-            window.outerHeight - window.innerHeight > 220;
-
-        if (widthThreshold || heightThreshold) {
-
-            document.body.innerHTML = "";
-            window.location.replace("about:blank");
-        }
-
-    }, 1500);
-
-}
-
-/* =========================
-   Disable Console
-========================= */
-(function () {
-
-    console.clear();
-
-    function block() {
-        return false;
-    }
-
-    console.log = block;
-    console.warn = block;
-    console.error = block;
-    console.info = block;
-    console.debug = block;
-    console.table = block;
-
-})();
-
-/* =========================
-   Block "view-source:"
-========================= */
-if (window.location.href.startsWith("view-source:")) {
-
-    document.body.innerHTML = "";
-    window.location.replace("about:blank");
-
-}
-
-/* =========================
-   Prevent iframe inspection
-========================= */
-if (window.top !== window.self) {
-
-    try {
-        window.top.location = window.self.location;
-    } catch (e) {}
-
-}
+document.addEventListener("contextmenu", e => e.preventDefault());
 </script>
-
-<style>
-html, body {
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    -khtml-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-    overflow-x: hidden;
-}
-
-/* Disable image dragging */
-img {
-    pointer-events: none;
-    -webkit-user-drag: none;
-}
-
-/* Hide selection */
-::selection {
-    background: transparent;
-}
-</style>
-
-
 </body>
 </html>
