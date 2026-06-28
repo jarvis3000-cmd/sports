@@ -266,7 +266,7 @@ function renderChannels(){
   });
 }
 
-async function openPlayer(index){
+async function openPlayer(index) {
   currentIndex = index;
   document.getElementById("playerModal").style.display = "flex";
   updateStatus("Retrieving Stream Tokens...", "loading");
@@ -275,11 +275,20 @@ async function openPlayer(index){
   const container = document.getElementById('player-container');
   const chan = filtered[index];
 
-  // Async cookie fetching from working baseline
-  const activeCookie = await getCookieValue(chan.cookieUrl);
+  videoEl.pause();
+  videoEl.src = "";
+  videoEl.load();
 
-  if (shakaUiInstance) { shakaUiInstance.destroy(); shakaUiInstance = null; }
-  if (shakaPlayerInstance) { await shakaPlayerInstance.destroy(); shakaPlayerInstance = null; }
+  if (shakaUiInstance) { 
+    try { shakaUiInstance.destroy(); } catch(e){} 
+    shakaUiInstance = null; 
+  }
+  if (shakaPlayerInstance) { 
+    try { await shakaPlayerInstance.destroy(); } catch(e){} 
+    shakaPlayerInstance = null; 
+  }
+
+  const activeCookie = await getCookieValue(chan.cookieUrl);
 
   shakaPlayerInstance = new shaka.Player(videoEl);
   shakaUiInstance = new shaka.ui.Overlay(shakaPlayerInstance, container, videoEl);
@@ -289,7 +298,7 @@ async function openPlayer(index){
   });
 
   const playerConfig = {
-       streaming: { lowLatencyMode: true, bufferingGoal: 5 },
+       streaming: { lowLatencyMode: true },
        abr: { enabled: true }
   };
 
@@ -298,7 +307,6 @@ async function openPlayer(index){
   }
   shakaPlayerInstance.configure(playerConfig);
 
-  // Synchronized Network Interceptor Matching Working Parameters Exactly
   if (activeCookie) {
     shakaPlayerInstance.getNetworkingEngine().registerRequestFilter((type, request) => {
       request.headers["Referer"] = "https://www.jiotv.com/";
@@ -320,12 +328,6 @@ async function openPlayer(index){
     updateStatus("Loading Stream...", "loading");
     await shakaPlayerInstance.load(chan.link);
     
-    const tracks = shakaPlayerInstance.getVariantTracks().sort((a, b) => a.bandwidth - b.bandwidth);
-    if (tracks.length > 0) {
-      shakaPlayerInstance.selectVariantTrack(tracks[0], true);
-      shakaPlayerInstance.configure({ abr: { enabled: true } });
-    }
-
     videoEl.play().catch(()=>{});
     updateStatus("Live Stream Connected!", "success");
     videoEl.muted = false;
@@ -339,9 +341,11 @@ async function openPlayer(index){
 async function closePlayer(){
   const videoEl = document.getElementById('video');
   videoEl.pause();
+  videoEl.src = "";
+  videoEl.load();
   
-  if (shakaUiInstance) { shakaUiInstance.destroy(); shakaUiInstance = null; }
-  if (shakaPlayerInstance) { await shakaPlayerInstance.destroy(); shakaPlayerInstance = null; }
+  if (shakaUiInstance) { try { shakaUiInstance.destroy(); } catch(e){} shakaUiInstance = null; }
+  if (shakaPlayerInstance) { try { await shakaPlayerInstance.destroy(); } catch(e){} shakaPlayerInstance = null; }
   
   statusEl.className = '';
   document.getElementById("playerModal").style.display = "none";
